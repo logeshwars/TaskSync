@@ -1,0 +1,25 @@
+# Keep the Docker build context small and reproducible.
+# Anything listed here is NOT copied into the image.
+
+node_modules
+dist
+coverage
+.eslintcache
+*.log
+
+# Env files — secrets must be injected at runtime, never baked in.
+.env
+.env.*
+!.env.example
+
+# VCS / docs
+.git
+.gitignore
+README.md
+
+# Tests aren't needed in the production image
+test
+
+# Docker meta
+Dockerfile
+.dockerignore

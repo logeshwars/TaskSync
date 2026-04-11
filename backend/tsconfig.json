@@ -1,0 +1,29 @@
+{
+  // Backend TypeScript config — extends the monorepo strict base.
+  // Workspace-specific settings: CommonJS module system (Nest's default),
+  // decorator metadata for DI, and CommonJS-friendly output.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // NestJS uses CommonJS at runtime so reflect-metadata works with decorators.
+    "module": "commonjs",
+    "moduleResolution": "node",
+
+    // Decorators + emitted metadata are mandatory for Nest's DI / Mongoose.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    // Build outputs
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "declaration": true,
+
+    // Faster incremental builds during dev.
+    "incremental": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+
+    // CommonJS interop niceties
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,31 @@
+# EditorConfig — https://editorconfig.org
+#
+# Single source of truth for whitespace, encoding, and line endings across every
+# editor in the team. EditorConfig is supported natively by VS Code, JetBrains,
+# Vim, Emacs, etc., so we don't have to push per-editor settings.
+#
+# Senior rationale: kills "whitespace-only" diffs in PRs and removes the entire
+# class of "works on my machine" issues caused by mixed CRLF/LF or tab vs space.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# Markdown allows trailing whitespace — two trailing spaces means a hard line break.
+[*.md]
+trim_trailing_whitespace = false
+
+# Makefiles require literal tab indentation — non-negotiable.
+[Makefile]
+indent_style = tab
+
+# Lock files and minified output: leave alone.
+[{package-lock.json,*.min.*}]
+insert_final_newline = false

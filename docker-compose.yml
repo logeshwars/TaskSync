@@ -1,0 +1,124 @@
+# =============================================================================
+# TaskSync — local development stack
+#
+# Default invocation:
+#   docker compose up -d
+#     -> starts only `mongo` and `redis` (the infra you can't easily run on
+#        the host). The backend and frontend are intended to run on the host
+#        with hot reload (`npm run start:dev` / `npm run dev`).
+#
+# Full container stack:
+#   docker compose --profile app up -d
+#     -> additionally builds and runs the backend and frontend as containers.
+#        Useful for smoke-testing the production-ish build path before merging.
+#
+# Senior rationale: keeping infra in compose and apps on the host is the
+# fastest dev loop in practice. The `app` profile keeps the option open
+# without forcing it on every developer.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # MongoDB — primary datastore
+  # ---------------------------------------------------------------------------
+  mongo:
+    image: mongo:7
+    container_name: tasksync-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # `mongosh` ships with the mongo:7 image; ping is the canonical liveness probe.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Redis — cache, pub/sub, Socket.IO adapter backbone
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: tasksync-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    # AOF persistence so dev data survives container restarts.
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Backend — NestJS API. Only starts under the "app" profile.
+  # ---------------------------------------------------------------------------
+  backend:
+    profiles: ["app"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: tasksync-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      LOG_LEVEL: debug
+      # Service-name DNS works inside the compose network.
+      MONGO_URI: mongodb://mongo:27017/tasksync
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Override these in a `.env` file for anything resembling a real run.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-please-change-me-32chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-please-change-me-32chars}
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 7d
+      CORS_ORIGIN: http://localhost:5173
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Bind-mount source for hot reload; anonymous volume for node_modules so
+    # the host's modules don't shadow the container's (different OS/arch).
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Vite dev server. Only starts under the "app" profile.
+  # Uses a generic Node image rather than its own Dockerfile (which we'll add
+  # in Phase 13.1) so this works today without extra build artefacts.
+  # ---------------------------------------------------------------------------
+  frontend:
+    profiles: ["app"]
+    image: node:20-alpine
+    container_name: tasksync-frontend
+    working_dir: /usr/src/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000/api/v1
+      VITE_SOCKET_URL: http://localhost:3000
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - backend
+
+# -----------------------------------------------------------------------------
+# Named volumes — survive `docker compose down` (use `down -v` to wipe).
+# -----------------------------------------------------------------------------
+volumes:
+  mongo-data:
+  redis-data:

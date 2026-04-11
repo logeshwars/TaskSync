@@ -1,0 +1,12 @@
+# Backend-local ignores. Most common patterns live in the root .gitignore;
+# this file only adds workspace-specific entries.
+
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.eslintcache
+
+# Local env (never commit; only .env.example is checked in)
+.env
+.env.local

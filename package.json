@@ -1,0 +1,30 @@
+{
+  "name": "tasksync",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TaskSync — real-time collaborative task management platform (monorepo root)",
+  "scripts": {
+    "//---format---": "Run Prettier across every workspace from the repo root",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml}\" --ignore-path .prettierignore --cache --cache-location node_modules/.cache/prettier",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml}\" --ignore-path .prettierignore --cache --cache-location node_modules/.cache/prettier",
+
+    "//---lint---": "Delegate to each workspace's own lint script",
+    "lint:frontend": "npm --prefix frontend run lint",
+    "lint:backend": "npm --prefix backend run lint",
+    "lint": "npm run lint:frontend && npm run lint:backend",
+
+    "//---typecheck---": "Run tsc --noEmit in each workspace",
+    "typecheck:frontend": "npm --prefix frontend exec -- tsc --noEmit",
+    "typecheck:backend": "npm --prefix backend exec -- tsc --noEmit",
+    "typecheck": "npm run typecheck:frontend && npm run typecheck:backend",
+
+    "//---verify---": "What CI runs — formatting + lint + types in one shot",
+    "verify": "npm run format:check && npm run lint && npm run typecheck"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

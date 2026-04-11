@@ -1,0 +1,121 @@
+# =============================================================================
+# Root .gitignore for the TaskSync monorepo
+#
+# Each workspace (frontend/, backend/) may add its own .gitignore for project-
+# specific entries, but anything that applies to the whole repo lives here.
+# =============================================================================
+
+# --- OS artifacts -----------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.android/
+# --- Editors / IDEs ---------------------------------------------------------
+# We keep .vscode out by default but allow opt-in shared settings via the
+# negation pattern below.
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+.history/
+
+.antigravity/*
+
+# JetBrains (IntelliJ, WebStorm, PyCharm, Rider, Fleet, etc.)
+.idea/
+.idea_modules/
+*.iml
+*.ipr
+*.iws
+.fleet/
+
+# Other editors
+.zed/
+.cursor/
+.aider*
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# Eclipse / NetBeans
+.project
+.classpath
+.settings/
+nbproject/
+
+# Vim / Emacs / misc
+*.swp
+*.swo
+*.swn
+*~
+\#*\#
+.\#*
+
+# --- Dependencies -----------------------------------------------------------
+node_modules/
+.pnp/
+.pnp.js
+.yarn/cache
+.yarn/install-state.gz
+
+# --- Build outputs ----------------------------------------------------------
+dist/
+build/
+out/
+.next/
+.nuxt/
+*.tsbuildinfo
+
+# --- Test artifacts ---------------------------------------------------------
+coverage/
+.nyc_output/
+*.lcov
+junit.xml
+
+# --- Caches -----------------------------------------------------------------
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.prettiercache
+.turbo/
+.vite/
+
+# --- Logs -------------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Runtime / process files ------------------------------------------------
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# --- Environment files ------------------------------------------------------
+# NEVER commit real secrets. Examples are committed and end with `.example`.
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+
+# --- Docker / local data ----------------------------------------------------
+.docker/
+docker-data/
+mongo-data/
+redis-data/
+
+# --- Misc -------------------------------------------------------------------
+*.tgz
+*.tar.gz
+.tmp/
+tmp/
+.android/
+.antigravity/

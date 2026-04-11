@@ -1,0 +1,71 @@
+{
+  // ===========================================================================
+  // Shared TypeScript compiler options for the TaskSync monorepo.
+  //
+  // Both `frontend/tsconfig.app.json` and `backend/tsconfig.json` extend this
+  // file. Workspace-specific options (module system, JSX, lib targets) live in
+  // the extending file; everything that's about *type safety* lives here so
+  // both halves of the codebase share the exact same guarantees.
+  //
+  // Senior rationale: drift in strictness between client and server is one of
+  // the most common sources of "it compiles but blows up at runtime" bugs in
+  // full-stack TS projects. One base file = one guarantee.
+  // ===========================================================================
+  "$schema": "https://json.schemastore.org/tsconfig",
+
+  "compilerOptions": {
+    // -----------------------------------------------------------------------
+    // Language target
+    // -----------------------------------------------------------------------
+    // ES2022: supported by Node 18+ and every evergreen browser. Gives us
+    // class fields, top-level await, .at(), Error.cause, etc.
+    "target": "ES2022",
+    "lib": ["ES2022"],
+
+    // -----------------------------------------------------------------------
+    // Strictness — the entire reason we use TypeScript
+    // -----------------------------------------------------------------------
+    // `strict: true` is the umbrella; the individual flags below are listed
+    // explicitly so any future change is intentional and reviewable.
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "useUnknownInCatchVariables": true,
+
+    // -----------------------------------------------------------------------
+    // Extra safety beyond `strict`
+    // -----------------------------------------------------------------------
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    // Forces array/object index access to return `T | undefined`. Catches
+    // off-by-one and missing-key bugs at compile time. Worth the small extra
+    // bookkeeping at access sites.
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+
+    // -----------------------------------------------------------------------
+    // Module resolution & interop
+    // -----------------------------------------------------------------------
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    // Trust @types packages — checking them all is slow and rarely catches
+    // bugs in our own code.
+    "skipLibCheck": true,
+
+    // -----------------------------------------------------------------------
+    // Output
+    // -----------------------------------------------------------------------
+    "sourceMap": true,
+    "declaration": false,
+    "removeComments": false
+  }
+}

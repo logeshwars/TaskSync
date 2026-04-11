@@ -1,0 +1,6 @@
+{
+  // Production build config — extends the dev tsconfig but excludes tests.
+  // `nest build` uses this file by default.
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "test", "dist", "**/*.spec.ts", "**/*.e2e-spec.ts"]
+}

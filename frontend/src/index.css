@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 16% 8%;
+    --foreground: 210 20% 92%;
+
+    --card: 220 14% 11%;
+    --card-foreground: 210 20% 92%;
+
+    --popover: 220 14% 11%;
+    --popover-foreground: 210 20% 92%;
+
+    --primary: 158 64% 52%;
+    --primary-foreground: 220 16% 8%;
+
+    --secondary: 220 12% 16%;
+    --secondary-foreground: 210 20% 92%;
+
+    --muted: 220 12% 16%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 261 73% 65%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 12% 18%;
+    --input: 220 12% 16%;
+    --ring: 158 64% 52%;
+
+    --radius: 0.75rem;
+
+    /* Custom kanban tokens */
+    --col-backlog: 220 70% 60%;
+    --col-todo: 43 90% 58%;
+    --col-progress: 261 73% 65%;
+    --col-done: 158 64% 52%;
+    --col-blocked: 0 72% 60%;
+
+    --card-glow: 158 64% 52%;
+    --surface-raised: 220 14% 13%;
+    --surface-sunken: 220 16% 6%;
+
+    --sidebar-background: 220 16% 6%;
+    --sidebar-foreground: 210 20% 70%;
+    --sidebar-primary: 158 64% 52%;
+    --sidebar-primary-foreground: 220 16% 8%;
+    --sidebar-accent: 220 12% 14%;
+    --sidebar-accent-foreground: 210 20% 92%;
+    --sidebar-border: 220 12% 14%;
+    --sidebar-ring: 158 64% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+}
+
+@layer utilities {
+  .font-mono-display {
+    font-family: 'Space Mono', monospace;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 2px;
+  }
+
+  .card-hover {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px -4px hsl(var(--card-glow) / 0.15);
+  }
+
+  .col-glow-backlog { box-shadow: 0 0 0 1px hsl(var(--col-backlog) / 0.3), 0 4px 24px -8px hsl(var(--col-backlog) / 0.2); }
+  .col-glow-todo { box-shadow: 0 0 0 1px hsl(var(--col-todo) / 0.3), 0 4px 24px -8px hsl(var(--col-todo) / 0.2); }
+  .col-glow-progress { box-shadow: 0 0 0 1px hsl(var(--col-progress) / 0.3), 0 4px 24px -8px hsl(var(--col-progress) / 0.2); }
+  .col-glow-done { box-shadow: 0 0 0 1px hsl(var(--col-done) / 0.3), 0 4px 24px -8px hsl(var(--col-done) / 0.2); }
+  .col-glow-blocked { box-shadow: 0 0 0 1px hsl(var(--col-blocked) / 0.3), 0 4px 24px -8px hsl(var(--col-blocked) / 0.2); }
+
+  .tag-pill {
+    @apply text-xs font-mono-display px-2 py-0.5 rounded-full font-medium tracking-wide;
+  }
+
+  .dragging {
+    opacity: 0.4;
+    transform: scale(0.97);
+  }
+
+  .drag-over {
+    background: hsl(var(--primary) / 0.06);
+    border-color: hsl(var(--primary) / 0.4) !important;
+  }
+}

@@ -1,0 +1,38 @@
+# Files Prettier should leave alone — usually because they're generated,
+# vendored, or have their own formatter.
+
+# --- Dependencies & build ---
+node_modules/
+dist/
+build/
+out/
+coverage/
+.next/
+.vite/
+.turbo/
+
+# --- Lock files (managed by package managers, never hand-edit) ---
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lock
+bun.lockb
+
+# --- Generated / minified ---
+*.min.js
+*.min.css
+*.map
+
+# --- Markdown that we keep verbatim ---
+CHANGELOG.md
+LICENSE
+LICENSE.md
+
+# --- Binary / non-text ---
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.svg
+*.pdf
