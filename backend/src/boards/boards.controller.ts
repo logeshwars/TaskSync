@@ -14,9 +14,11 @@ import {
   Body,
   Controller,
   Delete,
+  forwardRef,
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   Patch,
   Post,
@@ -37,8 +39,11 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import type { AuthenticatedUser } from '../auth/interfaces/jwt-payload.interface';
+import { BoardCacheService } from '../common/cache/board-cache.service';
 import { InviteMemberDto } from '../workspaces/dto/invite-member.dto';
 import { WorkspaceMemberGuard } from '../workspaces/guards/workspace-member.guard';
+import { CardsService } from '../cards/cards.service';
+import { ListsService } from '../lists/lists.service';
 import { BoardsService } from './boards.service';
 import {
   BoardResponseDto,
@@ -56,7 +61,18 @@ import {
 @ApiBearerAuth('access-token')
 @Controller()
 export class BoardsController {
-  constructor(private readonly boards: BoardsService) {}
+  constructor(
+    private readonly boards: BoardsService,
+    private readonly boardCache: BoardCacheService,
+    // forwardRef breaks the module-level circular dependency: ListsModule
+    // imports BoardsModule, and BoardsModule needs ListsModule to hydrate
+    // reads. Nest resolves the cycle at runtime when we use forwardRef on
+    // both the module import AND the injected dependency.
+    @Inject(forwardRef(() => ListsService))
+    private readonly lists: ListsService,
+    @Inject(forwardRef(() => CardsService))
+    private readonly cards: CardsService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Nested under /workspaces/:slug/boards
@@ -105,8 +121,50 @@ export class BoardsController {
   })
   @ApiOkResponse({ type: HydratedBoardResponseDto })
   async findOne(@Param('id') id: string): Promise<HydratedBoardResponseDto> {
-    const { board, lists, cards } = await this.boards.findHydrated(id);
-    return { ...this.toResponse(board), lists, cards };
+    // Check Redis first — saves two Mongo queries on cache hit.
+    const cached = await this.boardCache.get<HydratedBoardResponseDto>(id);
+    if (cached) return cached;
+
+    const board = await this.boards.findByIdOrThrow(id);
+    // Fire the two read queries in parallel — they're independent and
+    // we want to minimise tail latency for the most-hit endpoint.
+    const [lists, cards] = await Promise.all([
+      this.lists.findByBoard(board._id),
+      this.cards.findByBoard(board._id),
+    ]);
+    const hydrated: HydratedBoardResponseDto = {
+      ...this.toResponse(board),
+      lists: lists.map((l) => ({
+        id: l._id.toString(),
+        boardId: l.boardId.toString(),
+        title: l.title,
+        position: l.position,
+        wipLimit: l.wipLimit,
+        cardOrder: l.cardOrder.map((cid) => cid.toString()),
+        archived: l.archivedAt !== null,
+      })),
+      cards: cards.map((c) => ({
+        id: c._id.toString(),
+        boardId: c.boardId.toString(),
+        listId: c.listId.toString(),
+        title: c.title,
+        description: c.description,
+        priority: c.priority,
+        tags: c.tags,
+        assignees: c.assignees.map((a) => a.toString()),
+        dueDate: c.dueDate,
+        progress: c.progress,
+        position: c.position,
+        commentsCount: c.commentsCount,
+        createdBy: c.createdBy.toString(),
+        archived: c.archivedAt !== null,
+      })),
+    };
+
+    // Store asynchronously — don't block the response on the cache write.
+    void this.boardCache.set(id, hydrated);
+
+    return hydrated;
   }
 
   @Patch('boards/:id')

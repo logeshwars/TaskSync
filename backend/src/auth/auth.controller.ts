@@ -16,7 +16,7 @@ import {
   ApiNoContentResponse,
 } from '@nestjs/swagger';
 
-import { AuthService } from './auth.service';
+import { AuthService, type AuthResult } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import { AuthResponseDto, PublicUserDto } from './dto/auth-response.dto';
@@ -35,7 +35,7 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new user account.' })
   @ApiCreatedResponse({ type: AuthResponseDto })
-  signup(@Body() dto: SignupDto) {
+  signup(@Body() dto: SignupDto): Promise<AuthResult> {
     return this.auth.signup(dto.email, dto.password, dto.name);
   }
 
@@ -45,7 +45,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Exchange email + password for an access/refresh pair.' })
   @ApiOkResponse({ type: AuthResponseDto })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials.' })
-  login(@Body() dto: LoginDto) {
+  login(@Body() dto: LoginDto): Promise<AuthResult> {
     return this.auth.login(dto.email, dto.password);
   }
 
@@ -55,7 +55,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Rotate a refresh token. Returns a fresh pair.' })
   @ApiOkResponse({ type: AuthResponseDto })
   @ApiUnauthorizedResponse({ description: 'Refresh token invalid or revoked.' })
-  refresh(@Body() dto: RefreshTokenDto) {
+  refresh(@Body() dto: RefreshTokenDto): Promise<AuthResult> {
     return this.auth.refresh(dto.refreshToken);
   }
 

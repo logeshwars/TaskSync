@@ -20,6 +20,7 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import type { AppConfig } from './config/configuration';
+import { RedisIoAdapter } from './realtime/redis-io.adapter';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
@@ -74,6 +75,13 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix('api/v1');
 
   // ---------------------------------------------------------------------------
+  // WebSocket adapter — backs Socket.IO with a Redis pub/sub adapter so
+  // realtime events fan out across every backend pod. The gateway listens
+  // on the HTTP server spun up by app.listen(), at the `/realtime` path.
+  // ---------------------------------------------------------------------------
+  app.useWebSocketAdapter(new RedisIoAdapter(app));
+
+  // ---------------------------------------------------------------------------
   // OpenAPI / Swagger — only mounted outside production. The docs UI is a
   // useful integration tool in dev/staging but ships zero value in prod and
   // can leak schema details. Set EXPOSE_DOCS=true to override if needed.
@@ -100,6 +108,7 @@ async function bootstrap(): Promise<void> {
       .addTag('lists', 'Kanban columns inside a board')
       .addTag('cards', 'Task cards inside a list')
       .addTag('comments', 'Per-card discussion')
+      .addTag('activity', 'Board activity feed')
       .addTag('health', 'Liveness / readiness probes')
       .build();
 

@@ -9,15 +9,24 @@
  * Senior rationale: this file is intentionally a manifest, not a place for
  * business logic. Each line should answer "what subsystem are we wiring up".
  */
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
+import { ActivityModule } from './activity/activity.module';
 import { AuthModule } from './auth/auth.module';
 import { BoardsModule } from './boards/boards.module';
+import { CardsModule } from './cards/cards.module';
+import { CommentsModule } from './comments/comments.module';
+import { CacheModule } from './common/cache/cache.module';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { configuration, type AppConfig } from './config/configuration';
 import { validationSchema } from './config/validation.schema';
 import { HealthModule } from './health/health.module';
+import { ListsModule } from './lists/lists.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { RedisModule } from './redis/redis.module';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
@@ -41,6 +50,20 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     }),
 
     // -------------------------------------------------------------------------
+    // Rate limiting — 60 requests per minute by default. Auth endpoints
+    // (signup/login/refresh) are hit from unauthenticated clients so they
+    // need a per-IP throttle to blunt credential-stuffing. We register
+    // globally via APP_GUARD and let feature controllers opt out with
+    // `@SkipThrottle()` if they're write-heavy internal calls.
+    // -------------------------------------------------------------------------
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000, // 1 minute
+        limit: 60,
+      },
+    ]),
+
+    // -------------------------------------------------------------------------
     // MongoDB — async factory so the URI flows through validated config
     // rather than reading process.env directly (which would bypass Joi).
     // -------------------------------------------------------------------------
@@ -48,9 +71,6 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService<AppConfig, true>) => ({
         uri: config.get('mongoUri', { infer: true }),
-        // Forbid querying by fields not declared on the schema. Mongoose
-        // defaults to `false` here, which is permissive and bug-prone.
-        strictQuery: true,
       }),
     }),
 
@@ -79,7 +99,33 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
     UsersModule,
     AuthModule,
     WorkspacesModule,
+    // ActivityModule, RealtimeModule, and CacheModule are @Global() —
+    // they register BEFORE the feature modules that consume their
+    // services so those providers are available at instantiation time.
+    ActivityModule,
+    RealtimeModule,
+    CacheModule,
     BoardsModule,
+    ListsModule,
+    CardsModule,
+    CommentsModule,
+  ],
+  providers: [
+    // Apply the throttler globally. Individual handlers can opt out with
+    // `@SkipThrottle()` or tighten via `@Throttle()`.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Apply request-id middleware across every route. Keeping this at the
+   * root module means every handler — including the ones in feature
+   * modules we add later — gets the same correlation id for free.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

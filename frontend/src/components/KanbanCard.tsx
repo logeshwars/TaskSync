@@ -44,9 +44,10 @@ interface KanbanCardProps {
   onDragStart: (e: React.DragEvent, cardId: string, fromColumn: string) => void;
   columnId: string;
   onDelete: (columnId: string, cardId: string) => void;
+  onClick?: (cardId: string) => void;
 }
 
-export function KanbanCard({ card, onDragStart, columnId, onDelete }: KanbanCardProps) {
+export function KanbanCard({ card, onDragStart, columnId, onDelete, onClick }: KanbanCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const priority = priorityConfig[card.priority];
@@ -59,6 +60,7 @@ export function KanbanCard({ card, onDragStart, columnId, onDelete }: KanbanCard
         onDragStart(e, card.id, columnId);
       }}
       onDragEnd={() => setIsDragging(false)}
+      onClick={() => onClick?.(card.id)}
       className={`group relative rounded-xl border border-border bg-card p-3.5 cursor-grab active:cursor-grabbing card-hover select-none ${isDragging ? "dragging" : ""}`}
     >
       {/* Drag handle */}

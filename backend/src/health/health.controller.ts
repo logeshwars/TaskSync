@@ -11,6 +11,8 @@
  * have failed. Always check the things you actually need to serve a request.
  */
 import { Controller, Get } from '@nestjs/common';
+
+import { Public } from '../auth/decorators/public.decorator';
 import {
   HealthCheck,
   HealthCheckService,
@@ -27,6 +29,7 @@ export class HealthController {
     private readonly redis: RedisHealthIndicator,
   ) {}
 
+  @Public()
   @Get()
   @HealthCheck()
   check() {

@@ -80,9 +80,10 @@ interface KanbanColumnProps {
   onAddCard: (columnId: string, title: string, priority: Priority) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
   isDragOver: boolean;
+  onCardClick?: (cardId: string) => void;
 }
 
-export function KanbanColumn({ column, onDragStart, onDragOver, onDrop, onAddCard, onDeleteCard, isDragOver }: KanbanColumnProps) {
+export function KanbanColumn({ column, onDragStart, onDragOver, onDrop, onAddCard, onDeleteCard, isDragOver, onCardClick }: KanbanColumnProps) {
   const [showAdd, setShowAdd] = useState(false);
   const colors = colColorMap[column.color];
   const isOverLimit = column.limit && column.cards.length >= column.limit;
@@ -130,6 +131,7 @@ export function KanbanColumn({ column, onDragStart, onDragOver, onDrop, onAddCar
             columnId={column.id}
             onDragStart={onDragStart}
             onDelete={onDeleteCard}
+            onClick={onCardClick}
           />
         ))}
 

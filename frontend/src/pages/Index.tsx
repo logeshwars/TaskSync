@@ -1,234 +1,211 @@
-import { useState } from "react";
-import { Plus, Search, Bell, User, Zap, BarChart2, Settings, Filter } from "lucide-react";
-import { KanbanColumn, ColumnData } from "@/components/KanbanColumn";
-import { CardData, Priority } from "@/components/KanbanCard";
-import { NewCardDialog } from "@/components/NewCardDialog";
-import { TimelineView } from "@/components/TimelineView";
-import { CalendarView } from "@/components/CalendarView";
-import { ReportsView } from "@/components/ReportsView";
-import boardBg from "@/assets/board-bg.jpg";
+/**
+ * Main board page.
+ *
+ * Reads the hydrated board from Redux (populated by WorkspaceBoardSelector
+ * on mount) and transforms it into the ColumnData[] shape the existing
+ * presentational components expect.
+ *
+ * Drag-drop fires an optimistic Redux update followed by PATCH /cards/:id/move.
+ * If the server rejects, we refetch the board to roll back.
+ */
+import { useMemo, useRef, useState } from 'react';
+import { Plus, Search, Bell, User, UserPlus, Zap, BarChart2, Settings, Filter, Loader2 } from 'lucide-react';
 
-type TabView = "Board" | "Timeline" | "Calendar" | "Reports";
+import { KanbanColumn } from '@/components/KanbanColumn';
+import type { Priority } from '@/components/KanbanCard';
+import { NewCardDialog } from '@/components/NewCardDialog';
+import { TimelineView } from '@/components/TimelineView';
+import { CalendarView } from '@/components/CalendarView';
+import { ReportsView } from '@/components/ReportsView';
+import { CardDetailDrawer } from '@/components/CardDetailDrawer';
+import { InviteMemberDialog } from '@/components/InviteMemberDialog';
+import { WorkspaceBoardSelector } from '@/components/WorkspaceBoardSelector';
+import { PresenceAvatars } from '@/components/PresenceAvatars';
+import { hydratedBoardToColumns } from '@/lib/board-transform';
+import { api } from '@/lib/api';
+import { useRealtimeBoard } from '@/hooks/use-realtime-board';
+import { useAppDispatch, useAppSelector } from '@/store';
+import { logout } from '@/store/auth.slice';
+import {
+  fetchHydratedBoard,
+  moveCardOptimistic,
+} from '@/store/boards.slice';
+import boardBg from '@/assets/board-bg.jpg';
 
-const INITIAL_COLUMNS: ColumnData[] = [
-  {
-    id: "backlog",
-    title: "Backlog",
-    color: "backlog",
-    cards: [
-      {
-        id: "c1",
-        title: "Redesign onboarding flow for new enterprise clients",
-        description: "Map out all touchpoints and pain points in the current flow.",
-        priority: "medium",
-        tags: ["UX", "Research"],
-        assignee: { name: "Alex", color: "#6366f1" },
-        comments: 4,
-        attachments: 2,
-        dueDate: "Mar 12",
-      },
-      {
-        id: "c2",
-        title: "Audit third-party API integrations",
-        priority: "low",
-        tags: ["API", "Backend"],
-        assignee: { name: "Sam", color: "#f59e0b" },
-        comments: 1,
-      },
-    ],
-  },
-  {
-    id: "todo",
-    title: "To Do",
-    color: "todo",
-    limit: 5,
-    cards: [
-      {
-        id: "c3",
-        title: "Build new component library documentation site",
-        description: "Storybook integration with auto-generated docs.",
-        priority: "high",
-        tags: ["Frontend", "Design"],
-        assignee: { name: "Maya", color: "#10b981" },
-        comments: 7,
-        progress: 20,
-        dueDate: "Mar 15",
-      },
-      {
-        id: "c4",
-        title: "Write unit tests for auth module",
-        priority: "high",
-        tags: ["Testing", "Backend"],
-        assignee: { name: "Jordan", color: "#ec4899" },
-        comments: 2,
-        attachments: 1,
-      },
-      {
-        id: "c5",
-        title: "Set up CI/CD pipeline for staging environment",
-        priority: "critical",
-        tags: ["Backend"],
-        assignee: { name: "Alex", color: "#6366f1" },
-        dueDate: "Mar 10",
-      },
-    ],
-  },
-  {
-    id: "progress",
-    title: "In Progress",
-    color: "progress",
-    limit: 3,
-    cards: [
-      {
-        id: "c6",
-        title: "Mobile responsive dashboard redesign",
-        description: "Complete overhaul of the analytics dashboard for sub-768px breakpoints.",
-        priority: "high",
-        tags: ["Mobile", "Design"],
-        assignee: { name: "Maya", color: "#10b981" },
-        comments: 12,
-        attachments: 5,
-        progress: 65,
-        dueDate: "Mar 8",
-      },
-      {
-        id: "c7",
-        title: "Integrate Stripe payment webhooks",
-        priority: "critical",
-        tags: ["Backend", "API"],
-        assignee: { name: "Sam", color: "#f59e0b" },
-        comments: 3,
-        progress: 40,
-        dueDate: "Mar 9",
-      },
-    ],
-  },
-  {
-    id: "done",
-    title: "Done",
-    color: "done",
-    cards: [
-      {
-        id: "c8",
-        title: "User profile settings page",
-        priority: "medium",
-        tags: ["Frontend", "UX"],
-        assignee: { name: "Jordan", color: "#ec4899" },
-        comments: 5,
-        progress: 100,
-      },
-      {
-        id: "c9",
-        title: "Password reset email flow",
-        priority: "high",
-        tags: ["Backend"],
-        assignee: { name: "Alex", color: "#6366f1" },
-        comments: 2,
-        progress: 100,
-      },
-    ],
-  },
-  {
-    id: "blocked",
-    title: "Blocked",
-    color: "blocked",
-    cards: [
-      {
-        id: "c10",
-        title: "GDPR compliance audit — waiting on legal team",
-        description: "Cannot proceed until legal reviews the data retention policies.",
-        priority: "critical",
-        tags: ["Research"],
-        assignee: { name: "Sam", color: "#f59e0b" },
-        comments: 6,
-        dueDate: "Mar 20",
-      },
-    ],
-  },
-];
-
-let cardCounter = 100;
+type TabView = 'Board' | 'Timeline' | 'Calendar' | 'Reports';
 
 const Index = () => {
-  const [columns, setColumns] = useState<ColumnData[]>(INITIAL_COLUMNS);
+  const dispatch = useAppDispatch();
+  const { active: board, hydrateStatus } = useAppSelector((s) => s.boards);
+  const authUser = useAppSelector((s) => s.auth.user);
+
+  // Subscribe to realtime events for the active board.
+  useRealtimeBoard(board?.id ?? null);
+
   const [dragging, setDragging] = useState<{ cardId: string; fromColumn: string } | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const [showNewCard, setShowNewCard] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabView>("Board");
+  const [activeTab, setActiveTab] = useState<TabView>('Board');
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [showInvite, setShowInvite] = useState(false);
+  const [addingColumn, setAddingColumn] = useState(false);
+  const [newColumnTitle, setNewColumnTitle] = useState('');
+  const [columnLoading, setColumnLoading] = useState(false);
+  const columnInputRef = useRef<HTMLInputElement>(null);
+
+  // Find the full CardItem from the hydrated board for the detail drawer.
+  const selectedCard = selectedCardId && board
+    ? board.cards.find((c) => c.id === selectedCardId) ?? null
+    : null;
+
+  // Transform hydrated board into the UI shape.
+  const columns = useMemo(() => {
+    if (!board) return [];
+    return hydratedBoardToColumns(board);
+  }, [board]);
 
   const totalCards = columns.reduce((sum, c) => sum + c.cards.length, 0);
-  const doneCards = columns.find(c => c.id === "done")?.cards.length ?? 0;
-  const blockedCards = columns.find(c => c.id === "blocked")?.cards.length ?? 0;
+  const doneCards = columns.find((c) => c.title.toLowerCase() === 'done')?.cards.length ?? 0;
+  const blockedCards = columns.find((c) => c.title.toLowerCase() === 'blocked')?.cards.length ?? 0;
+
+  // ---------------------------------------------------------------------------
+  // Drag & drop — optimistic move + API call
+  // ---------------------------------------------------------------------------
 
   const handleDragStart = (e: React.DragEvent, cardId: string, fromColumn: string) => {
     setDragging({ cardId, fromColumn });
-    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (_e: React.DragEvent, columnId: string) => {
     setDragOverColumn(columnId);
   };
 
-  const handleDrop = (_e: React.DragEvent, toColumn: string) => {
-    if (!dragging || dragging.fromColumn === toColumn) {
+  const handleDrop = async (_e: React.DragEvent, toColumn: string) => {
+    if (!dragging || dragging.fromColumn === toColumn || !board) {
       setDragging(null);
       setDragOverColumn(null);
       return;
     }
-    setColumns(prev => {
-      const next = prev.map(col => ({ ...col, cards: [...col.cards] }));
-      const from = next.find(c => c.id === dragging.fromColumn);
-      const to = next.find(c => c.id === toColumn);
-      if (!from || !to) return prev;
-      const cardIdx = from.cards.findIndex(c => c.id === dragging.cardId);
-      if (cardIdx === -1) return prev;
-      const [card] = from.cards.splice(cardIdx, 1);
-      to.cards.push(card);
-      return next;
-    });
+
+    const { cardId, fromColumn } = dragging;
     setDragging(null);
     setDragOverColumn(null);
+
+    // Optimistic update in Redux.
+    dispatch(
+      moveCardOptimistic({
+        cardId,
+        fromListId: fromColumn,
+        toListId: toColumn,
+        newPosition: 'optimistic', // Real position is computed server-side.
+      }),
+    );
+
+    try {
+      await api.patch(`/cards/${cardId}/move`, { targetListId: toColumn });
+      // Refetch to get authoritative positions.
+      dispatch(fetchHydratedBoard(board.id));
+    } catch {
+      // Rollback — refetch the board.
+      dispatch(fetchHydratedBoard(board.id));
+    }
   };
 
-  const handleAddCard = (columnId: string, title: string, priority: Priority, description?: string, tags?: string[], dueDate?: string) => {
-    const newCard: CardData = {
-      id: `new-${cardCounter++}`,
-      title,
-      priority,
-      description,
-      tags: tags ?? [],
-      dueDate,
-    };
-    setColumns(prev =>
-      prev.map(col =>
-        col.id === columnId ? { ...col, cards: [...col.cards, newCard] } : col
-      )
-    );
+  // ---------------------------------------------------------------------------
+  // Add card — POST to API then refetch
+  // ---------------------------------------------------------------------------
+
+  const handleAddCard = async (
+    columnId: string,
+    title: string,
+    priority: Priority,
+    description?: string,
+    tags?: string[],
+    dueDate?: string,
+  ) => {
+    if (!board) return;
+    const backendPriority = priority === 'critical' ? 'urgent' : priority;
+    try {
+      await api.post(`/lists/${columnId}/cards`, {
+        title,
+        priority: backendPriority,
+        description,
+        tags,
+        dueDate: dueDate || undefined,
+      });
+      dispatch(fetchHydratedBoard(board.id));
+    } catch (err) {
+      console.error('Failed to create card:', err);
+    }
   };
 
-  const handleDeleteCard = (columnId: string, cardId: string) => {
-    setColumns(prev =>
-      prev.map(col =>
-        col.id === columnId ? { ...col, cards: col.cards.filter(c => c.id !== cardId) } : col
-      )
-    );
+  // ---------------------------------------------------------------------------
+  // Delete card — DELETE then refetch
+  // ---------------------------------------------------------------------------
+
+  const handleDeleteCard = async (_columnId: string, cardId: string) => {
+    if (!board) return;
+    try {
+      await api.delete(`/cards/${cardId}`);
+      dispatch(fetchHydratedBoard(board.id));
+    } catch (err) {
+      console.error('Failed to delete card:', err);
+    }
   };
+
+  // ---------------------------------------------------------------------------
+  // Add column (list) — POST then refetch
+  // ---------------------------------------------------------------------------
+
+  const handleAddColumn = async () => {
+    const title = newColumnTitle.trim();
+    if (!title || !board) return;
+    setColumnLoading(true);
+    try {
+      await api.post(`/boards/${board.id}/lists`, { title });
+      dispatch(fetchHydratedBoard(board.id));
+      setNewColumnTitle('');
+      setAddingColumn(false);
+    } catch (err) {
+      console.error('Failed to create list:', err);
+    } finally {
+      setColumnLoading(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Search filter
+  // ---------------------------------------------------------------------------
 
   const filteredColumns = search
-    ? columns.map(col => ({
+    ? columns.map((col) => ({
         ...col,
-        cards: col.cards.filter(c =>
-          c.title.toLowerCase().includes(search.toLowerCase()) ||
-          c.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))
+        cards: col.cards.filter(
+          (c) =>
+            c.title.toLowerCase().includes(search.toLowerCase()) ||
+            c.tags.some((t) => t.toLowerCase().includes(search.toLowerCase())),
         ),
       }))
     : columns;
 
+  // ---------------------------------------------------------------------------
+  // Loading state
+  // ---------------------------------------------------------------------------
+
+  if (hydrateStatus === 'loading' && !board) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div
       className="min-h-screen flex flex-col"
-      style={{ backgroundImage: `url(${boardBg})`, backgroundSize: "cover", backgroundPosition: "center" }}
+      style={{ backgroundImage: `url(${boardBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
     >
       {/* Overlay */}
       <div className="absolute inset-0 bg-background/92 pointer-events-none" />
@@ -243,12 +220,19 @@ const Index = () => {
               </div>
               <span className="font-mono-display font-bold text-sm tracking-wider text-foreground">TASKSYNC</span>
             </div>
+
+            <WorkspaceBoardSelector />
+
             <nav className="hidden md:flex items-center gap-1">
-              {(["Board", "Timeline", "Calendar", "Reports"] as TabView[]).map(item => (
+              {(['Board', 'Timeline', 'Calendar', 'Reports'] as TabView[]).map((item) => (
                 <button
                   key={item}
                   onClick={() => setActiveTab(item)}
-                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${activeTab === item ? "bg-primary/15 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    activeTab === item
+                      ? 'bg-primary/15 text-primary font-medium'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
                 >
                   {item}
                 </button>
@@ -262,13 +246,20 @@ const Index = () => {
               <Search className="absolute left-2.5 w-3.5 h-3.5 text-muted-foreground" />
               <input
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search cards..."
                 className="bg-secondary border border-border rounded-lg pl-8 pr-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 transition-colors w-44 focus:w-56"
               />
             </div>
             <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
               <Filter className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setShowInvite(true)}
+              className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              title="Invite members"
+            >
+              <UserPlus className="w-4 h-4" />
             </button>
             <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground relative">
               <Bell className="w-4 h-4" />
@@ -277,17 +268,25 @@ const Index = () => {
             <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
               <Settings className="w-4 h-4" />
             </button>
-            <div className="w-7 h-7 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground ml-1">
-              <User className="w-4 h-4" />
-            </div>
+            <button
+              onClick={() => dispatch(logout())}
+              className="w-7 h-7 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground ml-1"
+              title={authUser?.name ?? 'User'}
+            >
+              {authUser?.name?.[0]?.toUpperCase() ?? <User className="w-4 h-4" />}
+            </button>
           </div>
         </header>
 
         {/* Board header bar */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
           <div>
-            <h1 className="text-xl font-bold text-foreground tracking-tight">Product Sprint <span className="text-primary">#14</span></h1>
-            <p className="text-xs text-muted-foreground font-mono-display mt-0.5 tracking-wide">MAR 1 – MAR 15, 2026 · TEAM TASKSYNC</p>
+            <h1 className="text-xl font-bold text-foreground tracking-tight">
+              {board?.title ?? 'Select a board'}
+            </h1>
+            <p className="text-xs text-muted-foreground font-mono-display mt-0.5 tracking-wide">
+              {board ? `${board.members.length} MEMBER${board.members.length !== 1 ? 'S' : ''}` : ''}
+            </p>
           </div>
 
           {/* Stats */}
@@ -307,26 +306,7 @@ const Index = () => {
               <div className="text-[10px] text-muted-foreground font-mono-display tracking-widest">BLOCKED</div>
             </div>
             <div className="w-px h-8 bg-border" />
-            <div className="flex items-center gap-1.5">
-              <div className="flex -space-x-1.5">
-                {[
-                  { name: "Alex", color: "#6366f1" },
-                  { name: "Maya", color: "#10b981" },
-                  { name: "Sam", color: "#f59e0b" },
-                  { name: "Jordan", color: "#ec4899" },
-                ].map(m => (
-                  <div
-                    key={m.name}
-                    className="w-7 h-7 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-bold text-background"
-                    style={{ backgroundColor: m.color }}
-                    title={m.name}
-                  >
-                    {m.name[0]}
-                  </div>
-                ))}
-              </div>
-              <span className="text-xs text-muted-foreground">4 members</span>
-            </div>
+            <PresenceAvatars />
           </div>
 
           <button
@@ -339,50 +319,134 @@ const Index = () => {
         </div>
 
         {/* View content */}
-        {activeTab === "Board" && (
+        {activeTab === 'Board' && (
           <div className="flex-1 overflow-x-auto scrollbar-thin px-6 py-6">
-            <div className="flex gap-5 items-start pb-6" style={{ minWidth: "max-content" }}>
-              {filteredColumns.map(col => (
-                <KanbanColumn
-                  key={col.id}
-                  column={col}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                  onAddCard={handleAddCard}
-                  onDeleteCard={handleDeleteCard}
-                  isDragOver={dragOverColumn === col.id}
-                />
-              ))}
-              <button className="w-72 shrink-0 h-20 rounded-2xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all text-muted-foreground hover:text-primary flex items-center justify-center gap-2 text-sm font-medium">
-                <Plus className="w-4 h-4" />
-                Add Column
-              </button>
-            </div>
+            {columns.length > 0 ? (
+              <div className="flex gap-5 items-start pb-6" style={{ minWidth: 'max-content' }}>
+                {filteredColumns.map((col) => (
+                  <KanbanColumn
+                    key={col.id}
+                    column={col}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                    onAddCard={handleAddCard}
+                    onDeleteCard={handleDeleteCard}
+                    isDragOver={dragOverColumn === col.id}
+                    onCardClick={setSelectedCardId}
+                  />
+                ))}
+                {addingColumn ? (
+                  <div className="w-72 shrink-0 rounded-2xl border-2 border-primary/40 bg-card p-4 space-y-3">
+                    <input
+                      ref={columnInputRef}
+                      autoFocus
+                      value={newColumnTitle}
+                      onChange={(e) => setNewColumnTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddColumn();
+                        if (e.key === 'Escape') { setAddingColumn(false); setNewColumnTitle(''); }
+                      }}
+                      placeholder="Column name..."
+                      className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 transition-colors"
+                      disabled={columnLoading}
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleAddColumn}
+                        disabled={!newColumnTitle.trim() || columnLoading}
+                        className="flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40 transition-all"
+                      >
+                        {columnLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                        Add Column
+                      </button>
+                      <button
+                        onClick={() => { setAddingColumn(false); setNewColumnTitle(''); }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingColumn(true)}
+                    className="w-72 shrink-0 h-20 rounded-2xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all text-muted-foreground hover:text-primary flex items-center justify-center gap-2 text-sm font-medium"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Column
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-4">
+                <p className="text-sm">No lists yet. Add a column to get started.</p>
+                {addingColumn ? (
+                  <div className="w-80 rounded-2xl border-2 border-primary/40 bg-card p-4 space-y-3">
+                    <input
+                      autoFocus
+                      value={newColumnTitle}
+                      onChange={(e) => setNewColumnTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddColumn();
+                        if (e.key === 'Escape') { setAddingColumn(false); setNewColumnTitle(''); }
+                      }}
+                      placeholder="Column name..."
+                      className="w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 transition-colors"
+                      disabled={columnLoading}
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleAddColumn}
+                        disabled={!newColumnTitle.trim() || columnLoading}
+                        className="flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40 transition-all"
+                      >
+                        {columnLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                        Add Column
+                      </button>
+                      <button
+                        onClick={() => { setAddingColumn(false); setNewColumnTitle(''); }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setAddingColumn(true)}
+                    className="flex items-center gap-2 bg-primary text-primary-foreground text-sm font-semibold px-5 py-2.5 rounded-xl hover:opacity-90 transition-opacity"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Column
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {activeTab === "Timeline" && <TimelineView columns={columns} />}
-        {activeTab === "Calendar" && <CalendarView columns={columns} />}
-        {activeTab === "Reports" && <ReportsView columns={columns} />}
+        {activeTab === 'Timeline' && <TimelineView columns={columns} />}
+        {activeTab === 'Calendar' && <CalendarView columns={columns} />}
+        {activeTab === 'Reports' && <ReportsView columns={columns} />}
 
         {/* Bottom status bar */}
         <footer className="flex items-center justify-between px-6 py-2.5 border-t border-border bg-card/40 backdrop-blur-sm">
           <div className="flex items-center gap-2">
             <BarChart2 className="w-3.5 h-3.5 text-muted-foreground" />
             <span className="text-xs text-muted-foreground font-mono-display tracking-wide">
-              {Math.round((doneCards / totalCards) * 100)}% COMPLETE
+              {totalCards > 0 ? `${Math.round((doneCards / totalCards) * 100)}% COMPLETE` : '0% COMPLETE'}
             </span>
           </div>
           <div className="hidden sm:flex items-center gap-2">
             <div className="h-1.5 w-48 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary rounded-full transition-all"
-                style={{ width: `${Math.round((doneCards / totalCards) * 100)}%` }}
+                style={{ width: `${totalCards > 0 ? Math.round((doneCards / totalCards) * 100) : 0}%` }}
               />
             </div>
           </div>
-          <span className="text-[10px] text-muted-foreground font-mono-display">TASKSYNC v1.0 · SPRINT BOARD</span>
+          <span className="text-[10px] text-muted-foreground font-mono-display">TASKSYNC v1.0</span>
         </footer>
 
         {/* New Card Dialog */}
@@ -391,6 +455,18 @@ const Index = () => {
           onClose={() => setShowNewCard(false)}
           columns={columns}
           onAdd={handleAddCard}
+        />
+
+        {/* Card Detail Drawer */}
+        <CardDetailDrawer
+          card={selectedCard}
+          onClose={() => setSelectedCardId(null)}
+        />
+
+        {/* Invite Member Dialog */}
+        <InviteMemberDialog
+          open={showInvite}
+          onClose={() => setShowInvite(false)}
         />
       </div>
     </div>

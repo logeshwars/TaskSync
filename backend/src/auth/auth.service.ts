@@ -41,7 +41,7 @@ interface TokenPair {
   refreshToken: string;
 }
 
-interface AuthResult extends TokenPair {
+export interface AuthResult extends TokenPair {
   user: AuthenticatedUser;
 }
 
