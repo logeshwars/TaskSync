@@ -9,7 +9,7 @@
  * If the server rejects, we refetch the board to roll back.
  */
 import { useMemo, useRef, useState } from 'react';
-import { Plus, Search, Bell, User, UserPlus, Zap, BarChart2, Settings, Filter, Loader2 } from 'lucide-react';
+import { Plus, Search, Bell, User, UserPlus, Zap, BarChart2, Settings, Filter, Loader2, LogOut } from 'lucide-react';
 
 import { KanbanColumn } from '@/components/KanbanColumn';
 import type { Priority } from '@/components/KanbanCard';
@@ -36,7 +36,8 @@ type TabView = 'Board' | 'Timeline' | 'Calendar' | 'Reports';
 
 const Index = () => {
   const dispatch = useAppDispatch();
-  const { active: board, hydrateStatus } = useAppSelector((s) => s.boards);
+  const { active: board, hydrateStatus, status: boardsStatus } = useAppSelector((s) => s.boards);
+  const { status: wsStatus } = useAppSelector((s) => s.workspaces);
   const authUser = useAppSelector((s) => s.auth.user);
 
   // Subscribe to realtime events for the active board.
@@ -49,6 +50,7 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<TabView>('Board');
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState('');
   const [columnLoading, setColumnLoading] = useState(false);
@@ -194,13 +196,10 @@ const Index = () => {
   // Loading state
   // ---------------------------------------------------------------------------
 
-  if (hydrateStatus === 'loading' && !board) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const boardAreaLoading =
+    wsStatus === 'loading' ||
+    (wsStatus === 'succeeded' && boardsStatus === 'loading') ||
+    (hydrateStatus === 'loading' && !board);
 
   return (
     <div
@@ -268,13 +267,33 @@ const Index = () => {
             <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
               <Settings className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => dispatch(logout())}
-              className="w-7 h-7 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground ml-1"
-              title={authUser?.name ?? 'User'}
-            >
-              {authUser?.name?.[0]?.toUpperCase() ?? <User className="w-4 h-4" />}
-            </button>
+            <div className="relative ml-1">
+              <button
+                onClick={() => setShowProfileMenu((v) => !v)}
+                className="w-7 h-7 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground"
+                title={authUser?.name ?? 'User'}
+              >
+                {authUser?.name?.[0]?.toUpperCase() ?? <User className="w-4 h-4" />}
+              </button>
+              {showProfileMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-50 w-52 bg-popover border border-border rounded-xl shadow-2xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-border/60">
+                      <p className="text-sm font-semibold text-foreground truncate">{authUser?.name ?? 'User'}</p>
+                      <p className="text-xs text-muted-foreground truncate">{authUser?.email ?? ''}</p>
+                    </div>
+                    <button
+                      onClick={() => { setShowProfileMenu(false); dispatch(logout()); }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </header>
 
@@ -321,7 +340,15 @@ const Index = () => {
         {/* View content */}
         {activeTab === 'Board' && (
           <div className="flex-1 overflow-x-auto scrollbar-thin px-6 py-6">
-            {columns.length > 0 ? (
+            {boardAreaLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : !board ? (
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-2">
+                <p className="text-sm">Select or create a board to get started.</p>
+              </div>
+            ) : columns.length > 0 ? (
               <div className="flex gap-5 items-start pb-6" style={{ minWidth: 'max-content' }}>
                 {filteredColumns.map((col) => (
                   <KanbanColumn

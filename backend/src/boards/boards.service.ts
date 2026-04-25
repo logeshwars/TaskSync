@@ -66,9 +66,14 @@ export class BoardsService {
     return board;
   }
 
-  /** Boards inside a workspace, optionally including archived ones. */
+  /**
+   * All boards inside a workspace visible to any workspace member.
+   * Board-level membership is enforced separately on read/write routes.
+   * WorkspaceMemberGuard already verified workspace membership before this runs.
+   */
   async findInWorkspace(
     workspaceSlug: string,
+    _userId: string,
     opts: { includeArchived?: boolean } = {},
   ): Promise<BoardDocument[]> {
     const ws = await this.workspaces.findBySlugOrThrow(workspaceSlug);

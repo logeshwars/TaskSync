@@ -6,17 +6,23 @@
  * or the home page.
  */
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Zap } from 'lucide-react';
 
 import { login } from '@/store/auth.slice';
 import { useAppDispatch, useAppSelector } from '@/store';
+import { getAccessToken } from '@/lib/api';
 
 export default function LoginPage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { status, error } = useAppSelector((s) => s.auth);
+  const { user, status, error } = useAppSelector((s) => s.auth);
+
+  // Already logged in (or token exists from prior session) — redirect to main page.
+  if (user || getAccessToken()) {
+    return <Navigate to="/" replace />;
+  }
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

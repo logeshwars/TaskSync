@@ -81,14 +81,15 @@ export class BoardsController {
   @Get('workspaces/:slug/boards')
   @UseGuards(WorkspaceMemberGuard, RolesGuard)
   @Roles('owner', 'admin', 'member', 'viewer')
-  @ApiOperation({ summary: 'List boards inside a workspace.' })
+  @ApiOperation({ summary: 'List boards inside a workspace that the user is a member of.' })
   @ApiQuery({ name: 'includeArchived', required: false, type: Boolean })
   @ApiOkResponse({ type: BoardResponseDto, isArray: true })
   async listInWorkspace(
     @Param('slug') slug: string,
+    @CurrentUser() user: AuthenticatedUser,
     @Query('includeArchived') includeArchived?: string,
   ): Promise<BoardResponseDto[]> {
-    const list = await this.boards.findInWorkspace(slug, {
+    const list = await this.boards.findInWorkspace(slug, user.id, {
       includeArchived: includeArchived === 'true',
     });
     return list.map((b) => this.toResponse(b));

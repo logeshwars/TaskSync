@@ -5,16 +5,21 @@
  * dispatches the signup thunk. On success the user lands on `/`.
  */
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Loader2, Zap } from 'lucide-react';
 
 import { signup } from '@/store/auth.slice';
 import { useAppDispatch, useAppSelector } from '@/store';
+import { getAccessToken } from '@/lib/api';
 
 export default function SignupPage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const { status, error } = useAppSelector((s) => s.auth);
+  const { user, status, error } = useAppSelector((s) => s.auth);
+
+  if (user || getAccessToken()) {
+    return <Navigate to="/" replace />;
+  }
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');

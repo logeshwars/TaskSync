@@ -20,11 +20,11 @@ import {
   type BoardSummary,
 } from '@/store/boards.slice';
 import {
-  createWorkspace,
   fetchWorkspaces,
   selectWorkspace,
   type Workspace,
 } from '@/store/workspaces.slice';
+import { CreateOrganizationDialog } from './CreateOrganizationDialog';
 
 export function WorkspaceBoardSelector() {
   const dispatch = useAppDispatch();
@@ -32,12 +32,7 @@ export function WorkspaceBoardSelector() {
   const { items: boards, active } = useAppSelector((s) => s.boards);
   const [wsOpen, setWsOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
-
-  // Inline create states.
-  const [creatingWs, setCreatingWs] = useState(false);
-  const [wsName, setWsName] = useState('');
-  const [wsLoading, setWsLoading] = useState(false);
-  const wsInputRef = useRef<HTMLInputElement>(null);
+  const [createWsOpen, setCreateWsOpen] = useState(false);
 
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [boardTitle, setBoardTitle] = useState('');
@@ -67,9 +62,6 @@ export function WorkspaceBoardSelector() {
 
   // Focus input when inline create form appears.
   useEffect(() => {
-    if (creatingWs) wsInputRef.current?.focus();
-  }, [creatingWs]);
-  useEffect(() => {
     if (creatingBoard) boardInputRef.current?.focus();
   }, [creatingBoard]);
 
@@ -81,34 +73,12 @@ export function WorkspaceBoardSelector() {
     dispatch(selectWorkspace(ws.id));
     dispatch(clearActiveBoard());
     setWsOpen(false);
-    setCreatingWs(false);
   };
 
   const handleSelectBoard = (board: BoardSummary) => {
     dispatch(fetchHydratedBoard(board.id));
     setBoardOpen(false);
     setCreatingBoard(false);
-  };
-
-  const handleCreateWorkspace = async () => {
-    const name = wsName.trim();
-    if (!name) return;
-    setWsLoading(true);
-    try {
-      const result = await dispatch(createWorkspace({ name })).unwrap();
-      // After creation the thunk auto-selects the new workspace.
-      // Clear active board so boards refetch for the new workspace.
-      dispatch(clearActiveBoard());
-      setWsName('');
-      setCreatingWs(false);
-      setWsOpen(false);
-      // Fetch boards for the newly created workspace.
-      dispatch(fetchBoards(result.slug));
-    } catch {
-      // Stay open so user can retry.
-    } finally {
-      setWsLoading(false);
-    }
   };
 
   const handleCreateBoard = async () => {
@@ -156,43 +126,18 @@ export function WorkspaceBoardSelector() {
                 {ws.name}
               </button>
             ))}
-            {workspaces.length === 0 && !creatingWs && (
+            {workspaces.length === 0 && (
               <p className="px-3 py-2 text-xs text-muted-foreground">No workspaces yet</p>
             )}
 
             <div className="border-t border-border mt-1 pt-1">
-              {creatingWs ? (
-                <div className="px-3 py-2 flex items-center gap-2">
-                  <input
-                    ref={wsInputRef}
-                    value={wsName}
-                    onChange={(e) => setWsName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCreateWorkspace();
-                      if (e.key === 'Escape') { setCreatingWs(false); setWsName(''); }
-                    }}
-                    placeholder="Organization name..."
-                    className="flex-1 bg-secondary border border-border rounded-lg px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 transition-colors"
-                    disabled={wsLoading}
-                  />
-                  <button
-                    onClick={handleCreateWorkspace}
-                    disabled={!wsName.trim() || wsLoading}
-                    className="px-2.5 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-40 transition-all flex items-center gap-1"
-                  >
-                    {wsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                    Add
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setCreatingWs(true)}
-                  className="w-full text-left px-3 py-1.5 text-sm text-muted-foreground hover:text-primary hover:bg-muted transition-colors flex items-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  New Organization
-                </button>
-              )}
+              <button
+                onClick={() => { setCreateWsOpen(true); setWsOpen(false); }}
+                className="w-full text-left px-3 py-1.5 text-sm text-muted-foreground hover:text-primary hover:bg-muted transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                New Organization
+              </button>
             </div>
           </div>
         )}
@@ -269,6 +214,8 @@ export function WorkspaceBoardSelector() {
           </div>
         )}
       </div>
+
+      <CreateOrganizationDialog open={createWsOpen} onClose={() => setCreateWsOpen(false)} />
     </div>
   );
 }
