@@ -1,0 +1,158 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+
+# Cancel any in-progress deploy on the same branch
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 1: Deploy backend to EC2
+  # ────────────────────────────────────────────────────────────────────────────
+  deploy-backend:
+    name: Deploy Backend → EC2
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/tasksync.pem
+          chmod 400 ~/.ssh/tasksync.pem
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Write production .env
+        run: |
+          cat > backend/.env.production << EOF
+          NODE_ENV=production
+          PORT=3000
+          LOG_LEVEL=info
+          MONGO_URI=${{ secrets.MONGO_URI }}
+          REDIS_HOST=${{ secrets.REDIS_HOST }}
+          REDIS_PORT=6379
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          JWT_ACCESS_SECRET=${{ secrets.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}
+          JWT_ACCESS_TTL=15m
+          JWT_REFRESH_TTL=7d
+          CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
+          EOF
+
+      - name: Sync source to EC2
+        run: |
+          rsync -az --progress \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude 'frontend' \
+            --exclude 'deploy' \
+            --exclude '.env' \
+            -e "ssh -i ~/.ssh/tasksync.pem" \
+            ./backend/ ubuntu@${{ secrets.EC2_HOST }}:/opt/tasksync/backend/
+
+      - name: Copy .env to EC2
+        run: |
+          scp -i ~/.ssh/tasksync.pem \
+            backend/.env.production \
+            ubuntu@${{ secrets.EC2_HOST }}:/opt/tasksync/backend/.env
+
+      - name: Build and restart Docker container
+        run: |
+          ssh -i ~/.ssh/tasksync.pem ubuntu@${{ secrets.EC2_HOST }} << 'REMOTE'
+            set -e
+            cd /opt/tasksync/backend
+
+            echo "Building production image..."
+            docker build --target production -t tasksync-backend:latest .
+
+            echo "Stopping old container..."
+            docker stop tasksync-backend 2>/dev/null || true
+            docker rm   tasksync-backend 2>/dev/null || true
+
+            echo "Starting new container..."
+            docker run -d \
+              --name tasksync-backend \
+              --restart unless-stopped \
+              -p 3000:3000 \
+              --env-file .env \
+              -v /etc/ssl/certs/global-bundle.pem:/etc/ssl/certs/global-bundle.pem:ro \
+              tasksync-backend:latest
+
+            sleep 5
+            docker ps | grep tasksync-backend
+            docker logs tasksync-backend --tail 30
+          REMOTE
+
+      - name: Health check
+        run: |
+          echo "Waiting for backend to be healthy..."
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://${{ secrets.EC2_HOST }}/api/v1/health || echo "000")
+            echo "Attempt $i: HTTP $STATUS"
+            [ "$STATUS" = "200" ] && echo "Backend healthy!" && exit 0
+            sleep 10
+          done
+          echo "Backend failed health check after 2 min"
+          exit 1
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 2: Deploy frontend to S3
+  # ────────────────────────────────────────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend → S3
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci --prefix frontend
+
+      - name: Write frontend .env
+        run: |
+          cat > frontend/.env.production << EOF
+          VITE_API_URL=${{ secrets.VITE_API_URL }}
+          VITE_SOCKET_URL=${{ secrets.VITE_SOCKET_URL }}
+          EOF
+
+      - name: Build frontend
+        run: npm --prefix frontend run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload assets (long cache — hashed filenames)
+        run: |
+          aws s3 sync frontend/dist/ s3://${{ secrets.S3_BUCKET }}/ \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html"
+
+      - name: Upload index.html (no cache)
+        run: |
+          aws s3 cp frontend/dist/index.html \
+            s3://${{ secrets.S3_BUCKET }}/index.html \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+      - name: Print frontend URL
+        run: |
+          echo "Frontend live at:"
+          echo "http://${{ secrets.S3_BUCKET }}.s3-website.${{ secrets.AWS_REGION }}.amazonaws.com"

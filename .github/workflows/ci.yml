@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  verify:
+    name: Format / Lint / Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Install backend deps
+        run: npm ci --prefix backend
+
+      - name: Install frontend deps
+        run: npm ci --prefix frontend
+
+      - name: Run verify (format + lint + typecheck)
+        run: npm run verify
+
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval \"db.adminCommand('ping').ok\""
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend deps
+        run: npm ci --prefix backend
+
+      - name: Run unit tests
+        run: npm --prefix backend run test
+        env:
+          NODE_ENV: test
+          MONGO_URI: mongodb://localhost:27017/tasksync_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          JWT_ACCESS_SECRET: test-access-secret-at-least-32-chars-long
+          JWT_REFRESH_SECRET: test-refresh-secret-at-least-32-chars-long
+          JWT_ACCESS_TTL: 15m
+          JWT_REFRESH_TTL: 7d
+          CORS_ORIGIN: http://localhost:5173
+
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci --prefix frontend
+
+      - name: Run tests
+        run: npm --prefix frontend run test -- --run
